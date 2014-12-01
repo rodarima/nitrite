@@ -1,0 +1,4 @@
+Umbrales en HSV para identificar señales.
+
+	H		S		V
+Azules	156 163		145 194		103 134
