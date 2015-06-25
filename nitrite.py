@@ -21,6 +21,7 @@ from image import *
 import sys
 import json
 import pprint
+import traceback
 
 
 class Plug:
@@ -199,6 +200,50 @@ class ModSimple(Mod):
 		if name: self.module_layout.addRow(name, spin)
 		return spin
 
+
+	def _disable_signals(self):
+		self.text_out.editingFinished.disconnect(self._out_updated)
+		self.combo_in.currentIndexChanged.disconnect(self._in_updated)
+
+	def _enable_signals(self):
+		self.text_out.editingFinished.connect(self._out_updated)
+		self.combo_in.currentIndexChanged.connect(self._in_updated)
+
+
+	def _out_updated(self):
+		out_name = str(self.text_out.text())
+		self.outputs[0].name = out_name
+		if self.on_update: self.on_update(self)
+
+	def _in_updated(self):
+		'Al cambiar la elección del combo de entrada'
+		selected_name = str(self.combo_in.currentText())
+		for plug_out in self.all_outputs:
+			if plug_out.name == selected_name:
+				#print("connecting "+self.name+' with '+ plug_out.name)
+				self.inputs[0].disconnect()
+				self.inputs[0].connect(plug_out)
+				self.update()
+				break
+
+	def _update_inputs(self):
+		"Actualiza en el combo las nuevas entradas"
+		available_outputs = []
+		for plug in self.all_outputs:
+			# No añadir la propia salida
+			if plug.mod == self: continue
+			available_outputs.append(plug)
+
+		self.combo_in_values = [plug.get_name() for plug in available_outputs]
+
+		combo = self.combo_in
+		i = combo.currentIndex()
+
+		combo.clear()
+		combo.addItems(self.combo_in_values)
+		if i < len(self.combo_in_values) and i >= 0:
+			combo.setCurrentIndex(i)
+
 class Mod2to1(Mod):
 	"Two inputs, one output"
 	def __init__(self, w, name):
@@ -226,7 +271,7 @@ class Mod2to1(Mod):
 		self.text_out.selectAll()
 		self.text_out.setFocus()
 
-		self.inputs += [PlugIn(self, name + '_in')]
+		self.inputs += [PlugIn(self, name + '_in1'), PlugIn(self, name + '_in2')]
 		self.outputs += [PlugOut(self, name + '_out')]
 
 	# -----
@@ -302,13 +347,14 @@ class Mod2to1(Mod):
 
 	def _in_updated(self):
 		'Al cambiar la elección un combo de la entrada'
-		for combo in self.combo_in:
+		for i in range(len(self.combo_in)):
+			combo = self.combo_in[i]
 			selected_name = str(combo.currentText())
 			for plug_out in self.all_outputs:
 				if plug_out.name == selected_name:
 					#print("connecting "+self.name+' with '+ plug_out.name)
-					self.inputs[0].disconnect()
-					self.inputs[0].connect(plug_out)
+					self.inputs[i].disconnect()
+					self.inputs[i].connect(plug_out)
 					self.update()
 					break
 
@@ -791,8 +837,20 @@ class ModBitwise(Mod2to1):
 			'Logic', self.operations_name, self.update)
 
 	def update(self):
+		print("  -->  Traceback for Bitwise")
+		traceback.print_stack()
+		raise Exception
 		if not self.inputs[0].connected(): return
 		if not self.inputs[0].data: return
+
+		print("---- {} CONNECTIONS ----".format(self.name))
+		print("Outputs")
+		for out_plug in self.outputs:
+			out_plug.show()
+		print("Inputs")
+		for in_plug in self.inputs:
+			in_plug.show()
+		print("---- END CONNECTIONS ----")
 
 		operation_tuple = self.operations[self.combo_operation.currentIndex()]
 		operation_function = operation_tuple[1]
@@ -803,11 +861,14 @@ class ModBitwise(Mod2to1):
 		if operation_tuple[2] == 2:
 			if not self.inputs[1].connected(): return
 			if not self.inputs[1].data: return
-			data2 = self.inputs[0].data
+			print("Applying {}".format(operation_tuple[0]))
+			data2 = self.inputs[1].data
 			img2 = data2.img
 			dst = operation_function(src1 = img1, src2 = img2)
 		elif operation_tuple[2] == 1:
 			dst = operation_function(src = img1)
+
+		print("Applyed shape {}".format(dst.shape))
 
 		data = ImageGray(dst)
 
