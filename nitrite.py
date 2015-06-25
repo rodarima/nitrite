@@ -1,5 +1,20 @@
 # -*- coding: utf-8 -*-
 
+# This file is part of Nitrite.
+#
+# Nitrite is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 2 of the License, or
+# (at your option) any later version.
+#
+# Nitrite is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Nitrite.  If not, see <http://www.gnu.org/licenses/>.
+
 from PyQt4 import QtGui, QtCore, uic
 from image import *
 
@@ -17,19 +32,19 @@ class Plug:
 
 	def get_mod(self):
 		return self.mod
-	
+
 	def get_name(self):
 		return self.name
-	
+
 	def set_mod(self, mod):
 		self.mod = mod
-	
+
 	def set_name(self, name):
 		self.name = name
-	
+
 	def connections(self):
 		return len(self.plugs)
-	
+
 	def show(self):
 		plugs = [plug.name for plug in self.plugs]
 		print("{} -> {}".format(self.name, plugs))
@@ -50,11 +65,11 @@ class PlugIn(Plug):
 		else:
 			print("PLUG ALREADY DISCONNECTED!")
 			#raise Exception()
-	
+
 	def update(self, data):
 		self.data = data
 		self.mod.update()
-	
+
 	def connected(self):
 		return self.plugs != []
 
@@ -87,12 +102,12 @@ class Mod:
 
 	def get_outputs(self):
 		return self.outputs
-	
+
 	def update_plugs(self, all_inputs, all_outputs):
 		'Actualiza las conexiones disponibles'
 		self.all_inputs = all_inputs
 		self.all_outputs = all_outputs
-	
+
 	def restore(self, config):
 		raise NotImplemented()
 
@@ -127,7 +142,7 @@ class ModSimple(Mod):
 
 		self.inputs += [PlugIn(self, name + '_in')]
 		self.outputs += [PlugOut(self, name + '_out')]
-	
+
 	# -----
 
 	def register_update(self, f): self.on_update = f
@@ -145,7 +160,7 @@ class ModSimple(Mod):
 
 	def restore(self, d):
 		self._disable_signals()
-		
+
 		self.text_out.setText(d['text_out'])
 		self.combo_in_values = d['combo_in_values']
 		combo = self.combo_in
@@ -173,13 +188,13 @@ class ModSimple(Mod):
 	def _enable_signals(self):
 		self.text_out.editingFinished.connect(self._out_updated)
 		self.combo_in.currentIndexChanged.connect(self._in_updated)
-		
+
 
 	def _out_updated(self):
 		out_name = str(self.text_out.text())
 		self.outputs[0].name = out_name
 		if self.on_update: self.on_update(self)
-	
+
 	def _in_updated(self):
 		'Al cambiar la elección del combo de entrada'
 		selected_name = str(self.combo_in.currentText())
@@ -279,7 +294,7 @@ class ModInput(Mod):
 		d['image_files'] = self.image_files
 		d['image_index'] = self.w.list_images.currentRow()
 		return d
-	
+
 	#No necesita actualizar la salida, pues siempre es la misma
 
 
@@ -289,7 +304,7 @@ class ModOutput(Mod):
 		Mod.__init__(self, ModOutput.name)
 		self._init_gui(w)
 		self.inputs += [PlugIn(self, ModOutput.name + '_in')]
-	
+
 	def _init_gui(self, w):
 		self.w = w
 		self.module = QtGui.QGroupBox()
@@ -310,11 +325,11 @@ class ModOutput(Mod):
 		if plug_in.data == None: return
 
 		self._load_image(plug_in.data)
-	
+
 	def _updated(self):
 		'Al cambiar la elección del combo'
 		#print("Output combo_in changed")
-		
+
 		selected_name = str(self.combo_in.currentText())
 
 		#for plug_out in self.all_outputs:
@@ -371,7 +386,7 @@ class ModOutput(Mod):
 
 	def restore(self, d):
 		self._disable_signals()
-		
+
 		self.combo_in_values = d['combo_in_values']
 		combo = self.combo_in
 		combo.clear()
@@ -479,20 +494,20 @@ class ModRange(ModSimple):
 			label_layout.addWidget(QtGui.QLabel(c))
 
 		self.range_layout.addRow('', label_layout)
-		
+
 	def _add_model_combo(self):
 		self.combo_model = QtGui.QComboBox()
 		self.combo_model.addItems(self.model_names)
 		self.module_layout.addRow('Model', self.combo_model)
 		self.combo_model.currentIndexChanged.connect(self.update_model)
-		
+
 	def _add_bar(self, min_val, max_val):
 		bar = QtGui.QSpinBox()
 		bar.setMinimum(min_val)
 		bar.setMaximum(max_val)
 		bar.valueChanged.connect(self.update)
 		return bar
-	
+
 	# --- delete ---
 
 	def _delete_model_range(self):
@@ -600,7 +615,7 @@ class ModCLAHE(ModSimple):
 
 		self.module_layout.addRow("Clip", self.clip)
 		self.clip.valueChanged.connect(self.update)
-		
+
 		self.size = QtGui.QSpinBox()
 		self.size.setMinimum(1)
 		self.size.setMaximum(100.0)
@@ -609,7 +624,7 @@ class ModCLAHE(ModSimple):
 
 		self.module_layout.addRow("Size", self.size)
 		self.size.valueChanged.connect(self.update)
-	
+
 #	def _add_channels(self, ...)
 # TODO: Añadir un selector de canales en el módulo y filtrado
 
@@ -621,7 +636,7 @@ class ModCLAHE(ModSimple):
 			return
 
 		rgb = self.inputs[0].data.convert('rgb')
-		
+
 		hls = self.equalize(rgb)
 		self.outputs[0].update(hls)
 
@@ -690,7 +705,7 @@ class ModManager:
 
 	def process(self):
 		self.mod_out.get_input()
-		
+
 	def widget_update(self, mod):
 		'Los parámetros de un módulo han cambiado de valor'
 
@@ -707,7 +722,7 @@ class ModManager:
 		for m in self.modlist:
 			self.plugs_out += m.get_outputs()
 			self.plugs_in += m.get_inputs()
-		
+
 		print("---- CONNECTIONS ----")
 		for mod in self.modlist:
 			print("---- {} ----".format(mod.name))
@@ -730,7 +745,7 @@ class ModManager:
 	def get_mod_names(self, mods):
 		mods_name = [c.name for c in mods]
 		return mods_name
-	
+
 	def _new_name(self, mod_name):
 		"Crea un nuevo nombre para un módulo"
 		i = 1
@@ -752,7 +767,7 @@ class ModManager:
 		self.modlist.append(mod)
 		#mod.focus()
 		#print("Added " + str(mod.name))
-	
+
 	def _get_mod_conf(self, conf, mod_name):
 		for mod_conf in conf:
 			if mod_conf['name'] == mod_name: return mod_conf
@@ -798,7 +813,7 @@ class ModManager:
 
 		self.plugs_out_name = [plug.name for plug in self.plugs_out]
 		self.plugs_in_name = [plug.name for plug in self.plugs_in]
-			
+
 		for mod in self.modlist:
 			# Solo conectar las entradas, las salidas se conectarán
 			# automáticamente
@@ -846,7 +861,7 @@ class ModManager:
 		'Crea las conexiones de un módulo, sin conectarlas'
 		mod.inputs = []
 		mod.outputs = []
-		
+
 		plug_conf = mod_conf['plugs']
 		conf_inputs = plug_conf['inputs']
 		conf_outputs = plug_conf['outputs']
@@ -890,7 +905,7 @@ class Config:
 		dialog.setViewMode(QtGui.QFileDialog.Detail)
 
 		if not dialog.exec_(): return
-		
+
 		self.config_file = str(dialog.selectedFiles()[0])
 
 		with open(self.config_file) as fd:
@@ -899,7 +914,7 @@ class Config:
 		print("Config read:")
 		print(json.dumps(config, sort_keys=True, indent=4))
 		self.mm.restore(config)
-	
+
 	def save_config_as(self):
 		dialog = QtGui.QFileDialog()
 		dialog.setFileMode(QtGui.QFileDialog.AnyFile)
@@ -907,7 +922,7 @@ class Config:
 		dialog.setViewMode(QtGui.QFileDialog.Detail)
 
 		if not dialog.exec_(): return
-		
+
 		self.config_file = str(dialog.selectedFiles()[0])
 		config = self.mm.clone()
 
