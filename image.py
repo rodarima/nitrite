@@ -78,7 +78,7 @@ class ImageRGB(ImageColor):
 		if to in map(str.upper, self.alias):
 			return self
 		else:
-			for img_class in self.models:
+			for img_class in Image.models:
 				if to in map(str.upper, img_class.alias):
 					return img_class(cv2.cvtColor(self.img, img_class.fromRGB))
 
@@ -140,5 +140,8 @@ if __name__=="__main__":
 	wait_key()
 
 	bgr.convert('gray').show()
+	wait_key()
+
+	bgr.convert('gray').convert('rgb').show()
 	wait_key()
 

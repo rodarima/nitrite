@@ -67,6 +67,7 @@ class PlugIn(Plug):
 			#raise Exception()
 
 	def update(self, data):
+		print('PlugIn {} updating mod {}'.format(self.name, self.mod.name))
 		self.data = data
 		self.mod.update()
 
@@ -86,6 +87,7 @@ class PlugOut(Plug):
 			plug_in.plugs = []
 
 	def update(self, data):
+		print('PlugOut {} updating mod {}'.format(self.name, self.mod.name))
 		self.data = data
 		for plug in self.plugs:
 			plug.update(data)
@@ -180,14 +182,117 @@ class ModSimple(Mod):
 		return d
 
 	# -----
+	def new_combo(self, name, values, on_update):
+		combo = QtGui.QComboBox()
+		combo.addItems(values)
+		if len(values) > 0: combo.setCurrentIndex(0)
+		combo.currentIndexChanged.connect(on_update)
+		if name: self.module_layout.addRow(name, combo)
+		return combo
+
+	def new_spin(self, name, min_v, max_v, val, on_update):
+		spin = QtGui.QSpinBox()
+		spin.setMinimum(min_v)
+		spin.setMaximum(max_v)
+		spin.setValue(val)
+		spin.valueChanged.connect(on_update)
+		if name: self.module_layout.addRow(name, spin)
+		return spin
+
+class Mod2to1(Mod):
+	"Two inputs, one output"
+	def __init__(self, w, name):
+		Mod.__init__(self, name)
+		self.w = w
+		self.module = QtGui.QGroupBox()
+		self.module.setTitle(name)
+#		self.module.setFlat(True)
+#		self.module.setCheckable(True)
+		self.module_layout = QtGui.QFormLayout()
+		self.module.setLayout(self.module_layout)
+
+		self.combo_in = [QtGui.QComboBox(), QtGui.QComboBox()]
+		self.combo_in_values = []
+		self.text_out = QtGui.QLineEdit()
+		self.text_out.setText(name + '_out')
+
+		self.module_layout.addRow("In 1", self.combo_in[0])
+		self.module_layout.addRow("In 2", self.combo_in[1])
+		self.module_layout.addRow("Out", self.text_out)
+		self.on_update = None
+		self._enable_signals()
+
+		self.w.scroll_layout.addWidget(self.module)
+		self.text_out.selectAll()
+		self.text_out.setFocus()
+
+		self.inputs += [PlugIn(self, name + '_in')]
+		self.outputs += [PlugOut(self, name + '_out')]
+
+	# -----
+
+	def register_update(self, f): self.on_update = f
+
+	def update(self):
+		'No hacer nada, solo reenviar la entrada'
+		print("Simple update called")
+		if self.inputs[0].connected():
+			data = self.inputs[0].data
+			self.output[0].update(data)
+
+	def update_plugs(self, all_inputs, all_outputs):
+		Mod.update_plugs(self, all_inputs, all_outputs)
+		self._update_inputs()
+
+	def restore(self, d):
+		self._disable_signals()
+
+		self.text_out.setText(d['text_out'])
+		self.combo_in_values = d['combo_in_values']
+		for combo in self.combo_in:
+			combo.clear()
+			combo.addItems(self.combo_in_values)
+			i = d['combo_in_index']
+			if i < len(self.combo_in_values) and i >= 0:
+				combo.setCurrentIndex(i)
+
+			self._enable_signals()
+
+	def clone(self):
+		d = {}
+		d['combo_in_values'] = self.combo_in_values
+		d['combo_in_index'] = [combo.currentIndex() for combo in self.combo_in]
+		d['text_out'] = str(self.text_out.text())
+		return d
+
+	# -----
+	def new_combo(self, name, values, on_update):
+		combo = QtGui.QComboBox()
+		combo.addItems(values)
+		if len(values) > 0: combo.setCurrentIndex(0)
+		combo.currentIndexChanged.connect(on_update)
+		if name: self.module_layout.addRow(name, combo)
+		return combo
+
+	def new_spin(self, name, min_v, max_v, val, on_update):
+		spin = QtGui.QSpinBox()
+		spin.setMinimum(min_v)
+		spin.setMaximum(max_v)
+		spin.setValue(val)
+		spin.valueChanged.connect(on_update)
+		if name: self.module_layout.addRow(name, spin)
+		return spin
+
 
 	def _disable_signals(self):
 		self.text_out.editingFinished.disconnect(self._out_updated)
-		self.combo_in.currentIndexChanged.disconnect(self._in_updated)
+		for combo in self.combo_in:
+			combo.currentIndexChanged.disconnect(self._in_updated)
 
 	def _enable_signals(self):
 		self.text_out.editingFinished.connect(self._out_updated)
-		self.combo_in.currentIndexChanged.connect(self._in_updated)
+		for combo in self.combo_in:
+			combo.currentIndexChanged.connect(self._in_updated)
 
 
 	def _out_updated(self):
@@ -196,15 +301,16 @@ class ModSimple(Mod):
 		if self.on_update: self.on_update(self)
 
 	def _in_updated(self):
-		'Al cambiar la elección del combo de entrada'
-		selected_name = str(self.combo_in.currentText())
-		for plug_out in self.all_outputs:
-			if plug_out.name == selected_name:
-				#print("connecting "+self.name+' with '+ plug_out.name)
-				self.inputs[0].disconnect()
-				self.inputs[0].connect(plug_out)
-				self.update()
-				break
+		'Al cambiar la elección un combo de la entrada'
+		for combo in self.combo_in:
+			selected_name = str(combo.currentText())
+			for plug_out in self.all_outputs:
+				if plug_out.name == selected_name:
+					#print("connecting "+self.name+' with '+ plug_out.name)
+					self.inputs[0].disconnect()
+					self.inputs[0].connect(plug_out)
+					self.update()
+					break
 
 	def _update_inputs(self):
 		"Actualiza en el combo las nuevas entradas"
@@ -216,13 +322,13 @@ class ModSimple(Mod):
 
 		self.combo_in_values = [plug.get_name() for plug in available_outputs]
 
-		combo = self.combo_in
-		i = combo.currentIndex()
+		for combo in self.combo_in:
+			i = combo.currentIndex()
 
-		combo.clear()
-		combo.addItems(self.combo_in_values)
-		if i < len(self.combo_in_values) and i >= 0:
-			combo.setCurrentIndex(i)
+			combo.clear()
+			combo.addItems(self.combo_in_values)
+			if i < len(self.combo_in_values) and i >= 0:
+				combo.setCurrentIndex(i)
 
 class ModInput(Mod):
 	name = "Image"
@@ -324,6 +430,16 @@ class ModOutput(Mod):
 		if plug_in.connections == 0: return
 		if plug_in.data == None: return
 
+		print(type(plug_in.data).__name__)
+		print(plug_in.data.img.shape)
+		print("---- {} CONNECTIONS ----".format(self.name))
+		print("Outputs")
+		for out_plug in self.outputs:
+			out_plug.show()
+		print("Inputs")
+		for in_plug in self.inputs:
+			in_plug.show()
+		print("---- END CONNECTIONS ----")
 		self._load_image(plug_in.data)
 
 	def _updated(self):
@@ -424,7 +540,7 @@ class ModScale(ModSimple):
 			return
 
 		rgb = self.inputs[0].data.convert('rgb').img
-		
+
 		s = min(max(self.scale.value(), 0.001), 100)
 		rgb = cv2.resize(rgb, (0,0), fx=s, fy=s)
 		self.outputs[0].update(ImageRGB(rgb))
@@ -456,9 +572,9 @@ class ModRange(ModSimple):
 		self.bars_values = []
 
 		self._add_model_range()
-	
+
 	# --- add ---
-	
+
 	def _add_model_range(self):
 		self.range_layout = QtGui.QFormLayout()
 		self.range_widget = QtGui.QWidget()
@@ -521,14 +637,17 @@ class ModRange(ModSimple):
 
 	def _get_values(self):
 		values = []
-		for v in self.minmax:
-			values.append([self.bars[v][c].value() for c in self.channels])
+		for i in range(len(self.minmax)):
+			row = []
+			for j in range(len(self.model.channels)):
+				row.append(self.bars[i][j].value())
+			values.append(row)
 		return values
 
 	def _set_values(self, values):
 		for i in range(len(values)):
 			for j in range(len(values[i])):
-				self.bars[self.minmax[i]][self.channels[j]].setValue(values[i][j])
+				self.bars[i][j].setValue(values[i][j])
 
 	def update_model(self):
 		print('TODO: Recalcular modelo')
@@ -537,7 +656,7 @@ class ModRange(ModSimple):
 		self.model = self.models[i]
 		self._add_model_range()
 		self.update()
-	
+
 	def _update_bar_values(self):
 		self.bars_values = []
 		for row in self.bars:
@@ -560,23 +679,55 @@ class ModRange(ModSimple):
 		print("range con {} y {}".format(min_val, max_val))
 
 		gray = cv2.inRange(data_img, min_val, max_val)
+		print("inRange shape " + str(gray.shape))
 		data = ImageGray(gray)
 
 		self.outputs[0].update(data)
 
 	def restore(self, d):
 		ModSimple.restore(self, d['ModSimple'])
+		self.combo_model.setCurrentIndex(d['model'])
 		self._set_values(d['values'])
 		return
 
 	def clone(self):
 		d = {}
 		d['values'] = self._get_values()
+		d['model'] = self.combo_model.currentIndex()
 		d['ModSimple'] = ModSimple.clone(self)
 		return d
 
-class ModOpening(ModSimple):
-	name = 'Opening'
+class ModMorph(ModSimple):
+	name = 'Morphology'
+
+	def __init__(self, w, name):
+		ModSimple.__init__(self, w, name)
+		self.operations = [
+			('Close',		cv2.MORPH_CLOSE),
+			('Dilate',		cv2.MORPH_DILATE),
+			('Erode',		cv2.MORPH_ERODE),
+			('Open',		cv2.MORPH_OPEN),
+			('Black Hat',	cv2.MORPH_BLACKHAT),
+			('Top Hat',		cv2.MORPH_TOPHAT),
+			('Gradient',	cv2.MORPH_GRADIENT)
+		]
+		self.operations_name = [op[0] for op in self.operations]
+		self.kernel_shapes = [
+			('Rect',		cv2.MORPH_RECT),
+			('Ellipse',		cv2.MORPH_ELLIPSE),
+			('Cross',		cv2.MORPH_CROSS)
+		]
+		self.kernel_shapes_name = [shape[0] for shape in self.kernel_shapes]
+
+		self._add_widgets()
+
+	def _add_widgets(self):
+		self.combo_operation = self.new_combo(
+			'Operation', self.operations_name, self.update)
+		self.combo_shape = self.new_combo(
+			'Shape', self.kernel_shapes_name, self.update)
+		self.spin_size = self.new_spin(
+			'Size', 1, 200, 5, self.update)
 
 	def update(self):
 		if not self.inputs[0].connected(): return
@@ -584,23 +735,92 @@ class ModOpening(ModSimple):
 		if data == None:
 			#print("Scale got None")
 			return
+		print("---- {} CONNECTIONS ----".format(self.name))
+		print("Outputs")
+		for out_plug in self.outputs:
+			out_plug.show()
+		print("Inputs")
+		for in_plug in self.inputs:
+			in_plug.show()
+		print("---- END CONNECTIONS ----")
+
+		size = self.spin_size.value()
+		operation = self.operations[self.combo_operation.currentIndex()][1]
+		shape = self.kernel_shapes[self.combo_shape.currentIndex()][1]
 
 		img = data.img
-		kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(5,5))
-		opening = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel)
+		kernel = cv2.getStructuringElement(shape, (size, size))
+		opening = cv2.morphologyEx(img, operation, kernel)
 
 		data = ImageGray(opening)
 
 		self.outputs[0].update(data)
 
 	def restore(self, d):
-		self.scale.setValue(d['scale'])
+		self.combo_operation.setCurrentIndex(d['operation'])
+		self.combo_shape.setCurrentIndex(d['shape'])
+		self.spin_size.setValue(d['size'])
 		ModSimple.restore(self, d['ModSimple'])
 
 	def clone(self):
 		d = {}
-		d['scale'] = self.scale.value()
+		d['size'] = self.spin_size.value()
+		d['operation'] = self.combo_operation.currentIndex()
+		d['shape'] = self.combo_shape.currentIndex()
 		d['ModSimple'] = ModSimple.clone(self)
+		return d
+
+class ModBitwise(Mod2to1):
+	name = 'Bitwise'
+
+	def __init__(self, w, name):
+		Mod2to1.__init__(self, w, name)
+		self.operations = [
+			('AND',	cv2.bitwise_and,	2),
+			('OR',	cv2.bitwise_or,		2),
+			('XOR',	cv2.bitwise_xor,	2),
+			('NOT',	cv2.bitwise_not,	1)
+		]
+		self.operations_name = [op[0] for op in self.operations]
+
+		self._add_widgets()
+
+
+	def _add_widgets(self):
+		self.combo_operation = self.new_combo(
+			'Logic', self.operations_name, self.update)
+
+	def update(self):
+		if not self.inputs[0].connected(): return
+		if not self.inputs[0].data: return
+
+		operation_tuple = self.operations[self.combo_operation.currentIndex()]
+		operation_function = operation_tuple[1]
+
+		data1 = self.inputs[0].data
+		img1 = data1.img
+
+		if operation_tuple[2] == 2:
+			if not self.inputs[1].connected(): return
+			if not self.inputs[1].data: return
+			data2 = self.inputs[0].data
+			img2 = data2.img
+			dst = operation_function(src1 = img1, src2 = img2)
+		elif operation_tuple[2] == 1:
+			dst = operation_function(src = img1)
+
+		data = ImageGray(dst)
+
+		self.outputs[0].update(data)
+
+	def restore(self, d):
+		self.combo_operation.setCurrentIndex(d['operation'])
+		Mod2to1.restore(self, d['Mod2to1'])
+
+	def clone(self):
+		d = {}
+		d['operation'] = self.combo_operation.currentIndex()
+		d['Mod2to1'] = Mod2to1.clone(self)
 		return d
 
 class ModCLAHE(ModSimple):
@@ -940,7 +1160,7 @@ class Main(QtGui.QMainWindow):
 
 
 
-MODS = [ModScale, ModCLAHE, ModRange, ModOpening]
+MODS = [ModScale, ModCLAHE, ModRange, ModMorph, ModBitwise]
 app = QtGui.QApplication(sys.argv)
 #app.setStyle("plastique")
 myWidget = Main()
