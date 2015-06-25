@@ -1,0 +1,23 @@
+Diseño modular
+--------------
+Debido a la complejidad que esta alcanzando el modelado, me veo forzado a
+dividir el trabajo en módulos.
+
+Modulo de entrada: Permite seleccionar imágenes y leerlas.
+
+Módulo de visualización: Permite mostrar la imagen.
+
+Módulo de procesamiento: Recibe una imagen, y mediante una configuración la 
+procesa produciendo una imagen de salida.
+
+De esta forma:
+
+	[IN] ---> [PRO] ---> [PRO] ---> [PRO] ---> [OUT]
+
+Además la configuración de cada módulo debe ser guardada, para que el diseño de 
+la práctica pueda leerse de la configuración.
+
+Manager
+-------
+El ModManager debe controlar el comportamiento de los módulos. Siempre existe un 
+módulo de entrada y uno de salida.
