@@ -109,7 +109,12 @@ class Mod:
 	def update_plugs(self, all_inputs, all_outputs):
 		'Actualiza las conexiones disponibles'
 		self.all_inputs = all_inputs
-		self.all_outputs = all_outputs
+		self.all_outputs = [o for o in all_outputs if o not in self.outputs]
+
+	def get_plug(self, plugs, name):
+		names = [plug.name for plug in plugs]
+		i = names.index(name)
+		return plugs[i]
 
 	def restore(self, config):
 		raise NotImplemented()
@@ -882,6 +887,133 @@ class ModBitwise(Mod2to1):
 		d = {}
 		d['operation'] = self.combo_operation.currentIndex()
 		d['Mod2to1'] = Mod2to1.clone(self)
+		return d
+
+class ModGroup(Mod):
+	'Añade el widget de grupo donde irán los componentes'
+	def __init__(self, w, name):
+		Mod.__init__(self, name)
+		self.w = w
+		self.module = QtGui.QGroupBox()
+		self.setEnabled(False)
+		self.module.setTitle(name)
+#		self.module.setFlat(True)
+#		self.module.setCheckable(True)
+		self.module_layout = QtGui.QFormLayout()
+		self.module.setLayout(self.module_layout)
+		self.w.scroll_layout.addWidget(self.module)
+
+class ModIO(ModGroup):
+	'Añade las entradas y salidas, y gestiona las actualizaciones'
+	def __init__(self, w, name=None, puts=(1,1), config=None):
+		if config: name = config['name']
+		ModGroup.__init__(self, w, name)
+
+		self.ready = False
+
+		if config:
+			config_inputs = config['plugs']['inputs']
+			config_outputs = config['plugs']['outputs']
+			puts = (len(config_inputs), len(config_outputs))
+			self.gui_add_io(puts)
+		else:
+			self.gui_add_io(puts)
+			self.add_io()
+			self.gui_activate()
+
+	def gui_add_io(self, io=(1,1), config=None):
+		'Añade los selectores de entradas y salidas al widget'
+		self.io_gui = {} # widgets de entrada/salida
+		self.add_gui_inputs(io[0])
+		self.add_gui_outputs(io[1])
+
+	def gui_add_inputs(self, n):
+		'Añade n entradas tipo combo al módulo'
+		self.io_gui['in'] = []
+		for i in range(n):
+			# Añadir el combo
+			widget_in = QtGui.QComboBox()
+			self.module_layout.addRow("In" + str(i), widget_in)
+			self.io_gui['in'].append(widget_in)
+
+	def gui_add_outputs(self, n):
+		'Añade n salidas tipo lineEdit al módulo'
+		self.io_gui['out'] = []
+		for i in range(n):
+			widget_out = QtGui.QLineEdit()
+			self.module_layout.addRow("Out" + str(i), widget_out)
+			self.io_gui['out'].append(wigdet_out)
+
+	def gui_update_inputs(self):
+		'Actualiza la lista de selección de los combos de entrada'
+		plugs = [plug.name for plug in self.all_outputs]
+		for i in len(self.io_gui['in']):
+			widget = self.io_gui['in'][i]
+			j = widget.currentIndex()
+			widget.clear()
+			widget.addItems(plugs)
+			widget.setCurrentIndex(j)
+
+	def gui_activate(self):
+		'''Pone el módulo activo y listo para ser usado, activando
+		las señales de las entradas y salidas, así como la función de
+		actualización'''
+		# Activar señales de entrada
+		for widget in self.io_gui['in']:
+			widget.currentIndexChanged.connect(self.gui_in_updated)
+		# Activar señales de salida
+		for widget in self.io_gui['out']:
+			widget.editingFinished.disconnect(self.gui_out_updated)
+		#TODO...
+
+	def gui_in_updated(self):
+		'Al cambiar la elección del combo de entrada, cambiar PlugIn'
+		for i in len(self.io_gui['in']):
+			widget = self.io_gui['in'][i]
+			j = widget.currentIndex()
+			plug_in = self.inputs[i]
+			plug_in.disconnect()
+			plug_in.connect(self.all_outputs[j])
+
+		self.update()
+
+	def gui_out_updated(self):
+		'Al modificar el nombre de la salida, avisar a ModManager'
+		for i in len(self.io_gui['out']):
+			widget = self.io_gui['out'][i]
+			plug_out = self.outputs[i]
+			plug_out.name = str(widget.currentText())
+
+		self.out_updated(self)
+
+	def set_out_updated(self, fun): self.out_updated = fun
+
+	def update_plugs(self, all_inputs, all_outputs):
+		'''Cuando ModManager avise de que hay nuevas entradas, actualizar
+		la información de los combos de entrada'''
+		Mod.update_plugs(self, all_inputs, all_outputs)
+		self.gui_update_inputs()
+
+	def update(self): raise NotImplemented()
+
+	def restore(self, d):
+		self._disable_signals()
+
+		self.text_out.setText(d['text_out'])
+		self.combo_in_values = d['combo_in_values']
+		combo = self.combo_in
+		combo.clear()
+		combo.addItems(self.combo_in_values)
+		i = d['combo_in_index']
+		if i < len(self.combo_in_values) and i >= 0:
+			self.combo_in.setCurrentIndex(i)
+
+		self._enable_signals()
+
+	def clone(self):
+		d = {}
+		d['combo_in_index'] = [c.currentIndex() for c in self.io_gui['in']]
+		d['text_out'] = str(self.text_out.text())
 		return d
 
 class ModCLAHE(ModSimple):
