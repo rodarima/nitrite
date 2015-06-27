@@ -606,6 +606,57 @@ class ModScale(ModSimple):
 		d['ModSimple'] = ModSimple.clone(self)
 		return d
 
+class ModHist2D(ModSimple):
+	name = '2D Histogram'
+
+	def update(self):
+		if not self.inputs[0].connected(): return
+		data = self.inputs[0].data
+		if data == None:
+			#print("Scale got None")
+			return
+
+		hsv = data.convert('hsv')
+		chan = [hsv['h'], hsv['s']]
+
+		hist_list = []
+		for c in chan:
+			hist = cv2.calcHist([c],[0],None,[256],[0,255])
+			hist_log = np.log(hist+1)
+			#h_hist = cv2.normalize(h_log,0,255,cv2.NORM_MINMAX)
+			_min = np.min(hist_log)
+			_max = np.max(hist_log)
+			_range = _max - _min
+			hist_log = ((hist_log - _min) / _range) * 255
+			hist_list.append(np.array(hist_log, np.uint8))
+
+		print(hist_list)
+
+
+#		h_hist = np.histogram(h, bins=256)[0]
+#		s_hist = np.histogram(s, bins=256)[0]
+		h = hist_list
+		z = np.zeros((256+256+4,256+4), np.uint8)
+		for i in range(256):
+			for j in range(256):
+				z[i+2,j+2] += h[0][j]/2
+				z[i+2,j+2] += h[1][i]/2
+				if h[0][j] >= i: z[(511-i)+2,j+2] += 120
+				if h[1][j] >= i: z[(511-i)+2,j+2] += 80
+		data = ImageGray(z)
+		self.outputs[0].update(data)
+
+
+	def restore(self, d):
+		ModSimple.restore(self, d['ModSimple'])
+
+	def clone(self):
+		d = {}
+		d['ModSimple'] = ModSimple.clone(self)
+		return d
+
+
+
 class ModRange(ModSimple):
 	name = 'Range'
 	def __init__(self, w, name):
@@ -1016,6 +1067,83 @@ class ModIO(ModGroup):
 		d['text_out'] = str(self.text_out.text())
 		return d
 
+
+
+
+
+
+
+
+
+
+
+
+#class ModGUI(Mod):
+
+
+#class ModTest(ModBase):
+#
+#	def init_IO(self):
+#		self.add_input("In", [ImageColor])
+#		self.add_output("Out")
+#	
+#	def init_GUI(self):
+#		self.values = ['RGB', 'HSV', 'HLS']
+#		self.add_combo("Color space", values)
+#	
+#	def update(self):
+#		data = self.get_input("In")
+#		color_space = self.get_combo("Color space")
+#		out = data.convert(color_space)
+#		self.set_output("Out", out)
+#
+#class ModCircles(ModBase):
+#
+#	def init_IO(self):
+#		self.add_input("In", [ImageColor])
+#		self.add_output("Draw")
+#		self.add_output("Array")
+#	
+#	def init_GUI(self):
+#		self.add_int("Inv. Ratio")
+#		self.add_int("Min. Distance")
+#		self.add_group("Radius")
+#		self.add_int("Min", group="Radius", optional=True)
+#		self.add_int("Max", group="Radius", optional=True)
+#		self.add_int("Canny thr.", optional=True)
+#		self.add_int("Accumulator thr.", optional=True)
+#	
+#	def update(self):
+#		data = self.get_input("In")
+#		color_space = self.get_combo("Color space")
+#		img = data.img
+#		circles = cv2.HoughCircles(
+#			img,
+#			method = cv2.CV_HOUGH_GRADIENT,
+#			dp = self.get_int("Inv. Ratio"),
+#			minDist = self.get_int("Min. Distance")
+#			param1 = self.get_int("Canny thr.")
+#			param2 = self.get_int("Accumulator thr.")
+#			minRadius = self.get_int("Min", group="Radius")
+#			maxRadius = self.get_int("Max", group="Radius")
+#		)
+#		self.set_output("Array", circles)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class ModCLAHE(ModSimple):
 	name = 'CLAHE'
 	def __init__(self, w, name):
@@ -1353,7 +1481,7 @@ class Main(QtGui.QMainWindow):
 
 
 
-MODS = [ModScale, ModCLAHE, ModRange, ModMorph, ModBitwise]
+MODS = [ModScale, ModCLAHE, ModRange, ModMorph, ModBitwise, ModHist2D]
 app = QtGui.QApplication(sys.argv)
 #app.setStyle("plastique")
 myWidget = Main()
