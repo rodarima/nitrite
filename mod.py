@@ -206,17 +206,20 @@ class ModInput:
 		self.inputs = {}
 		self.input_filter = {}
 		self.input_combo = {}
+		self.input_values = {}
+		self.input_labels = []	# Importante para mantener el orden
 
 	def add_input(self, label, class_filter=[], optional=False):
-		if label in self.inputs:
+		if label in self.inputs.keys():
 			raise Exception("Already exists")
 
-		self.inputs[label] = self.pm.new_input(self, self.name + '_' + label)
+		self.input_labels.append(label)
+		self.inputs[label] = self.pm.new_input(self, self.name + '.' + label)
 		self.input_filter[label] = class_filter
 		self.input_combo[label] = self.new_input_combo(label)
 	
 	def remove_input(self, label):
-		if label not in self.inputs:
+		if label not in self.inputs.keys():
 			raise KeyError('Input not found')
 
 		# Borrar PlugIn
@@ -226,6 +229,8 @@ class ModInput:
 		self.input_filter.pop(label)
 		# Borrar el combo
 		self.remove_input_combo(label)
+		# Borrar de la lista de etiquetas
+		self.input_labels.remove(label)
 		
 	def remove_input_combo(self, label):
 		'Borra el combo y la etiqueta'
@@ -241,11 +246,17 @@ class ModInput:
 		widget_in = QtGui.QComboBox()
 		self.module_layout.addRow(label, widget_in)
 		self.input_combo[label] = widget_in
+		# Comenzar con una lista vacía
+		self.input_values[label] = []
 		return widget_in
 
 	def enable_inputs(self):
 		for combo in self.input_combo.values():
 			combo.currentIndexChanged.connect(self.updated_input_combo)
+
+	def disable_inputs(self):
+		for combo in self.input_combo.values():
+			combo.currentIndexChanged.disconnect(self.updated_input_combo)
 
 	def updated_input_combo(self):
 		'Conecta la entrada segun el valor del combo'
@@ -254,8 +265,9 @@ class ModInput:
 
 		i = self.input_combo.values().index(combo)
 		if i < 0: raise RuntimeError()
-		label = self.input_line.keys()[i]
+		label = self.input_combo.keys()[i]
 		input_plug = self.inputs[label]
+		#print('ModInput.updated_input_combo: connecting {} with {}'.format(input_plug, output_name))
 
 		self.pm.connect_input(input_plug, output_name)
 		self.update()
@@ -265,42 +277,88 @@ class ModInput:
 	def update_io(self):
 		'Actualiza la lista de estradas disponibles'
 		#print('ModInput {}: update_io()'.format(self.name))
+		self.disable_inputs()
 		for label in self.inputs.keys():
 			self.update_input_combo(label)
+		self.enable_inputs()
+		#TODO: Gestionar las señales, de forma que no se activen hasta
+		# que sea necesario, y se desactiven temporalmente cuando se
+		# modifican los valores del combo.
 
 	def update_input_combo(self, label):
 		#print('ModInput {}: update_input_combo({})'.format(self.name, label))
 		plug_in = self.inputs[label]
 		combo = self.input_combo[label]
 		input_filter = self.input_filter[label]
-		list_values = self.pm.get_outputs(input_filter)
-		self.update_input_combo_values(combo, list_values)
+		available_outputs = sorted(self.pm.get_outputs(input_filter))
+		self.input_values[label] = available_outputs
+		#print("Available outputs: {}".format(available_outputs))
+		i = self.get_input_index(label)
+		self.update_input_combo_values(combo, self.input_values[label], i)
+
+	def get_input_index(self, label):
+		plug_in = self.inputs[label]
+		i = -1
+		if plug_in.connected():
+			name = plug_in.plugs[0].name
+			i = self.input_values[label].index(name)
+
+		return i
 		
-	def update_input_combo_values(self, combo, values):
+	def update_input_combo_values(self, combo, values, index=None):
 		"Actualiza en el combo las nuevas entradas"
-		combo.currentIndexChanged.disconnect(self.update)
-		i = combo.currentIndex()
+		if index == None: index = combo.currentIndex()
 		combo.clear()
-		combo.addItems(values)
-		combo.setCurrentIndex(i)
-		combo.currentIndexChanged.connect(self.update)
+		for item in values:
+			combo.addItem(item)
+		combo.setCurrentIndex(index)
 
 	def show(self):
 		print("ModInput show:")
 		print(self.inputs)
 		print(self.input_combo)
 
+	def clone(self):
+		# Clona la lista de los combos así como sus selecciones
+		input_list = []
+		for label in self.input_labels:
+			input_config = {}
+			input_config['values'] = self.input_values[label]
+			input_config['index'] = self.input_combo[label].currentIndex()
+			input_config['name'] = self.inputs[label].name
+			input_config['label'] = label
+			input_config['filter'] = [c.__name__ for c in self.input_filter[label]]
+			input_list.append(input_config)
+		return input_list
+
+	def restore(self, config):
+		# Restaura la parte gráfica de las entradas. No debe
+		# alterar las conexiones reales del módulo
+		if self.enabled: raise RuntimeError()
+
+		for d in config:
+			label = d['label']
+			combo = self.new_input_combo(label)
+			self.update_input_combo_values(combo, d['values'], index=d['index'])
+			self.inputs[label] = self.pm.get_input(d['name'])
+			self.input_values[label] = d['values']
+			self.input_filter[label] = [globals()[c] for c in d['filter']]
+			self.input_labels.append(label)
+
+
 class ModOutput:
 	'Gestiona las salidas del módulo'
 	def __init__(self):
 		self.outputs = {} #Indexados por el nombre de la etiqueta
 		self.output_line = {}
+		self.output_labels = [] # Mantener el orden
 
 	def add_output(self, label, class_type=None):
 		if label in self.outputs:
 			raise Exception("Already exists")
 
-		self.outputs[label] = self.pm.new_output(self, self.name + '_' + label, class_type)
+		self.output_labels.append(label)
+		self.outputs[label] = self.pm.new_output(self, self.name + '.' + label, class_type)
 		self.output_line[label] = self.new_output_line(label)
 
 	def new_output_line(self, label):
@@ -317,7 +375,7 @@ class ModOutput:
 		# Obtener el nuevo nombre y comprobar que no este duplicado
 		output_line = self.w.sender()
 		self.disable_outputs()
-		new_name = output_line.text()
+		new_name = str(output_line.text())
 
 		i = self.output_line.values().index(output_line)
 		if i < 0: raise RuntimeError()
@@ -347,26 +405,43 @@ class ModOutput:
 		print("ModOutput show:")
 		print(self.outputs)
 		print(self.output_line)
-		
-#	def gui_out_updated(self):
-#		'Al modificar el nombre de la salida, avisar a ModManager'
-#		for i in len(self.io_gui['out']):
-#			widget = self.io_gui['out'][i]
-#			plug_out = self.outputs[i]
-#			plug_out.name = str(widget.currentText())
-#
-#		self.out_updated(self)
-#
+
+	def clone(self):
+		config_list = []
+		for label in self.output_labels:
+			d = {}
+			d['name'] = self.outputs[label].name
+			d['label'] = label
+			config_list.append(d)
+		return config_list
+
+	def restore(self, config):
+		# Restaura la parte gráfica de las salidas. No debe
+		# alterar las conexiones reales del módulo
+		if self.enabled: raise RuntimeError()
+
+		for d in config:
+			label = d['label']
+			self.outputs[label] = self.pm.get_output(d['name'])
+			line = self.new_output_line(label)
+			line.setText(self.outputs[label].name)
+			self.output_line[label] = line
+			self.output_labels.append(label)
+
+#class ModSpin:
+#	def add_int(self, label, min=0, max=None, step=1, group=None):
 
 class ModBase(Mod, ModInput, ModOutput):
-	def __init__(self, name, plug_manager, window):
+	def __init__(self, name, plug_manager, window, config=None):
 		Mod.__init__(self, name, plug_manager)
 		self.gui_add_group(window)
+		self.enabled = False
 		ModInput.__init__(self)
 		ModOutput.__init__(self)
 
-		self.init_IO()
-		self.gui_enable()
+		if config == None:
+			self.init_IO()
+			self.enable()
 
 	def gui_add_group(self, window):
 		'Añade el widget de grupo donde irán los componentes'
@@ -380,7 +455,9 @@ class ModBase(Mod, ModInput, ModOutput):
 		self.module.setLayout(self.module_layout)
 		self.w.scroll_layout.addWidget(self.module)
 	
-	def gui_enable(self):
+	def enable(self):
+		'Activa el módulo gráficamente y las señales'
+		self.enabled = True
 		self.enable_inputs()
 		self.enable_outputs()
 		self.module.setEnabled(True)
@@ -389,17 +466,33 @@ class ModBase(Mod, ModInput, ModOutput):
 	def show(self):
 		ModInput.show(self)
 		ModOutput.show(self)
+
+	def clone(self):
+		d = {}
+		d['ModInput'] = ModInput.clone(self)
+		d['ModOutput'] = ModOutput.clone(self)
+		return d
+
+	def restore(self, d):
+		ModInput.restore(self, d['ModInput'])
+		ModOutput.restore(self, d['ModOutput'])
+
+	def destroy(self):
+		'Borra el módulo completamente'
+		self.w.scroll_layout.removeWidget(self.module)
+		self.module.setParent(None)
+		self.module.deleteLater()
 		
 
 class ModTestInput(ModBase):
-	mod_name = 'Test Input'
+	mod_name = 'Test'
 
 	def init_IO(self):
-		self.add_input("In0", [ImageColor])
-		self.add_input("In1")
+		self.add_input("Gray", [ImageColor])
+		self.add_input("Color")
 
-		self.add_output("Out0", ImageColor)
-		self.add_output("Out1")
+		self.add_output("Img", ImageColor)
+		self.add_output("Mask")
 	
 	def init_GUI(self):
 		pass
@@ -535,11 +628,88 @@ class ModTestInput(ModBase):
 #		if i < len(self.combo_in_values) and i >= 0:
 #			combo.setCurrentIndex(i)
 
+class ModImage(Mod):
+	name = "Image"
+	def __init__(self, w):
+		Mod.__init__(self, ModInput.name)
+		self.outputs = [PlugOut(self, ModInput.name + '.img', ImageColor)]
+		self.w = w
+		self._enable_signals()
+		self.image_files = []
 
-class ModManager:
+	def _add_images(self):
+		dialog = QtGui.QFileDialog()
+		dialog.setFileMode(QtGui.QFileDialog.ExistingFiles)
+		dialog.setNameFilter("Images (*.png *.jpg *.gif *.bmp)")
+		dialog.setViewMode(QtGui.QFileDialog.Detail)
+
+		if(dialog.exec_()):
+			fileNames = dialog.selectedFiles()
+			self.image_files += [str(f) for f in fileNames]
+		self._update_images()
+
+	def _update_images(self):
+		imglist = self.w.list_images
+		i = imglist.currentRow()
+
+		imglist.clear()
+		imglist.addItems(self.image_files)
+
+		if(i >= 0 and i < len(self.image_files)):
+			imglist.setCurrentRow(i)
+		elif len(self.image_files) > 0:
+			imglist.setCurrentRow(0)
+
+
+	def _get_image(self):
+		if self.w.list_images.currentRow() != -1:
+			i = self.w.list_images.currentRow()
+			return str(self.w.list_images.item(i).text())
+
+		return None
+
+	def _disable_signals(self):
+		self.w.list_images.itemSelectionChanged.disconnect(self.update)
+		self.w.button_add_images.clicked.disconnect(self._add_images)
+
+	def _enable_signals(self):
+		self.w.list_images.itemSelectionChanged.connect(self.update)
+		self.w.button_add_images.clicked.connect(self._add_images)
+
+	def update(self):
+		img_name = self._get_image()
+		if(img_name == None): return
+
+		bgr = cv2.imread(img_name)
+		i = ImageBGR(bgr)
+		self.outputs[0].update(i)
+
+	def restore(self, d):
+		self._disable_signals()
+		self.image_files = d['image_files']
+		self._update_images()
+		i = d['image_index']
+		if i >= 0 and i < len(self.image_files):
+			self.w.list_images.setCurrentRow(i)
+		self._enable_signals()
+
+	def clone(self):
+		d = {}
+		d['image_files'] = self.image_files
+		d['image_index'] = self.w.list_images.currentRow()
+		return d
+
+	#No necesita actualizar la salida, pues siempre es la misma
+class ModList:
+	def gui_add_mod(self, mod):
+		widget_list = self.w.list_mods
+		widget_list.addItem(mod.name)
+
+class ModManager(ModList):
 	def __init__(self, window):
-		self. w = window
+		self.w = window
 		self.mods = {}
+		self.mod_names = []
 
 		# Añadir lista de modulos
 		self.all_mods = self.get_all_mods()
@@ -554,12 +724,6 @@ class ModManager:
 
 	def set_plug_manager(self, pm):
 		self.pm = pm
-
-	def remove_mod(self, mod):
-		#print("Del " + str(mod.name))
-		self.mods.pop(mod.name)
-		self.w.scroll_layout.removeWidget(mod.module)
-		mod.module.setParent(None)
 
 	def process(self):
 		self.mod_out.get_input()
@@ -586,11 +750,14 @@ class ModManager:
 		mods_name = [c.mod_name for c in mods]
 		return mods_name
 
+	def get_mod(self, name):
+		return self.mods[name]
+
 	def new_name(self, mod_name):
 		"Crea un nuevo nombre para un módulo"
 		i = START_INDEX
 		new_name = "{}{}".format(mod_name, i)
-		while new_name in self.mods:
+		while new_name in self.mods.keys():
 			i+=1
 			new_name = "{}{}".format(mod_name, i)
 		return new_name
@@ -603,6 +770,8 @@ class ModManager:
 		name = self.new_name(mod_class.mod_name)
 		mod = mod_class(name, self.pm, self.w)
 		self.mods[name] = mod
+		self.mod_names.append(name)
+		self.gui_add_mod(mod)
 		#print("Added " + str(mod.name))
 		#self.pm.show()
 		#mod.show()
@@ -612,37 +781,64 @@ class ModManager:
 #			if mod_conf['name'] == mod_name: return mod_conf
 #		return None
 #
-#	def restore(self, config):
-##		modlist_conf = config
-##		for conf in modlist_conf:
-##			mod_conf, mod_name = conf
-##			mod_class = self.all_mods[i]
-##
-##			modlist_conf.append({mod_name:mod_conf})
-##		return modlist_conf
-#		#TODO: Borrar todos los módulos anteriores
-#		for mod in self.modlist:
-#			if isinstance(mod, ModInput): continue
-#			if isinstance(mod, ModOutput): continue
-#			self.remove_mod(mod)
-#
-#		names = [mod.name for mod in self.modlist]
-#
-#		# Crear los módulos y conexiones
-#		for mod_conf in config:
-#			mod_name = mod_conf['name']
-#			#print(mod_name)
-#
-#			# Si ya existe (Input y Output)
-#			if mod_name in names: continue
-#			# TODO: Crear módulo por nombre de clase en función
-#			mod_class = globals()[mod_conf['class']]
-#			mod = mod_class(self.w, mod_name)
-#			mod.register_update(self.widget_update)
-#			self.modlist.append(mod)
-#
-#			self._set_plugs_conf(mod, mod_conf)
-#
+
+	def destroy_all(self):
+		'Borra todos los módulos y conexiones'
+		for mod in self.mods.values():
+			self.remove_mod(mod)
+
+	def remove_mod(self, mod):
+		#print("Del " + str(mod.name))
+		self.mods.pop(mod.name)
+		self.mod_names.remove(mod.name)
+		mod.destroy()
+
+	def clone(self):
+		config = {}
+		modlist_conf = []
+		for name in self.mod_names:
+			mod = self.mods[name]
+			d = {}
+			d['Mod'] = mod.clone()
+			d['name'] = mod.name
+			d['class'] = mod.__class__.__name__
+			modlist_conf.append(d)
+
+		config['ModManager'] = modlist_conf
+		config['PlugManager'] = self.pm.clone()
+
+		return config
+
+	def restore(self, config):
+		self.destroy_all()
+
+		modlist_conf = config['ModManager']
+
+		# Crear los módulos sin iniciar
+		for mod_conf in modlist_conf:
+			name = mod_conf['name']
+			mod_clone = mod_conf['Mod']
+			mod_class = globals()[mod_conf['class']]
+			mod = mod_class(name, self.pm, self.w, config=mod_clone)
+			
+			self.mod_names.append(name)
+			self.mods[name] = mod
+
+		# Crea las conexiones y las conecta
+		self.pm.restore(config['PlugManager'])
+
+		# Restaurar configuración de cada módulo
+		for mod_conf in modlist_conf:
+			name = mod_conf['name']
+			mod = self.mods[name]
+			mod.restore(mod_conf['Mod'])
+
+		# Activar los módulos
+		for mod_conf in modlist_conf:
+			name = mod_conf['name']
+			mod = self.mods[name]
+			mod.enable()
+			
 #		# Conectarlas
 #		self.plugs_out = []
 #		self.plugs_in = []
@@ -671,17 +867,17 @@ class ModManager:
 #
 #		self.update()
 #		self.mod_in.update()
-#
-##		for mod in self.modlist:
-##			print("---- {} ----".format(mod.name))
-##			print("Outputs")
-##			for out_plug in mod.outputs:
-##				out_plug.show()
-##			print("Inputs")
-##			for in_plug in mod.inputs:
-##				in_plug.show()
-#
-#
+
+#		for mod in self.modlist:
+#			print("---- {} ----".format(mod.name))
+#			print("Outputs")
+#			for out_plug in mod.outputs:
+#				out_plug.show()
+#			print("Inputs")
+#			for in_plug in mod.inputs:
+#				in_plug.show()
+
+
 #
 #	def _get_plugs_conf(self, mod):
 #		'Obtiene las conexiones de un módulo'
@@ -713,18 +909,6 @@ class ModManager:
 #			name, names = conf_output
 #			mod.outputs.append(PlugOut(mod, name))
 #
-#	def clone(self):
-#		modlist_conf = []
-#		for mod in self.modlist:
-#			mod_conf = {}
-#			mod_conf['Mod'] = mod.clone()
-#			mod_conf['plugs'] = self._get_plugs_conf(mod)
-#			mod_conf['name'] = mod.name
-#			mod_conf['class'] = mod.__class__.__name__
-#			modlist_conf.append(mod_conf)
-#
-#		return modlist_conf
-
 
 class Config:
 	def __init__(self, w, mm):
@@ -750,8 +934,8 @@ class Config:
 		with open(self.config_file) as fd:
 			config = json.load(fd)
 
-		print("Config read:")
-		print(json.dumps(config, sort_keys=True, indent=4))
+		#print("Config read:")
+		#print(json.dumps(config, sort_keys=True, indent=4))
 		self.mm.restore(config)
 
 	def save_config_as(self):
@@ -768,6 +952,9 @@ class Config:
 		with open(self.config_file, 'w') as fd:
 			json.dump(config, fd)
 
+		print("Config write:")
+		print(json.dumps(config, sort_keys=True, indent=4))
+
 
 class Main(QtGui.QMainWindow):
 	def __init__(self, parent = None):
@@ -777,14 +964,14 @@ class Main(QtGui.QMainWindow):
 		self.mm = ModManager(self)
 		self.pm = PlugManager(self.mm)
 		self.mm.set_plug_manager(self.pm)
-#		self.conf = Config(self, self.mm)
+		self.conf = Config(self, self.mm)
 
 
 
 #MODS = [ModScale, ModCLAHE, ModRange, ModMorph, ModBitwise, ModHist2D]
 MODS = [ModTestInput]
 app = QtGui.QApplication(sys.argv)
-#app.setStyle("plastique")
+app.setStyle("plastique")
 myWidget = Main()
 myWidget.show()
 app.exec_()

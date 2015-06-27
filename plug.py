@@ -209,6 +209,12 @@ class PlugManager(object):
 				input_list.append(name)
 		return input_list
 
+	def get_input(self, name):
+		return self.inputs[name]
+
+	def get_output(self, name):
+		return self.outputs[name]
+
 	def show(self):
 		print("")
 		print("---PlugManager: Inputs")
@@ -247,8 +253,68 @@ class PlugManager(object):
 
 		output = self.outputs[output_name]
 		# Automáticamente se desconecta
-		input_plug.connect(output_name)
+		input_plug.connect(output)
 
+
+	def clone(self):
+		# Clona el estado de las conexiones
+		config = {}
+		conf_inputs = {} # Las conexiones no necesitan orden
+		for plug_in in self.inputs.values():
+			d = {}
+			d['mod'] = plug_in.mod.name
+			d['plugs'] = [plug.name for plug in plug_in.plugs]
+			conf_inputs[plug_in.name] = d
+
+		config['inputs'] = conf_inputs
+
+		conf_outputs = {}
+		for plug_out in self.outputs.values():
+			d = {}
+			d['mod'] = plug_out.mod.name
+			if plug_out.plug_type != None:
+				d['type'] = plug_out.plug_type.__name__
+			else:
+				d['type'] = None
+			d['plugs'] = [plug.name for plug in plug_out.plugs]
+			conf_outputs[plug_out.name] = d
+
+		config['outputs'] = conf_outputs
+
+		return config
+
+	def restore(self, config):
+		# Restaura el estado de las conexiones SIN asignar
+		# los módulos
+		
+		# Borrar todas las conexiones si existen
+		self.inputs = {}
+		self.outputs = {}
+
+
+		# Crear conexiones sin conectar aún
+		conf_inputs = config['inputs']
+		for name in conf_inputs.keys():
+			d = conf_inputs[name]
+			mod = self.mod_manager.get_mod(d['mod'])
+			self.inputs[name] = GPlugIn(mod, name)
+
+		conf_outputs = config['outputs']
+		for name in conf_outputs.keys():
+			d = conf_outputs[name]
+			mod = self.mod_manager.get_mod(d['mod'])
+			plug_type = None
+			if d['type'] != None: plug_type = globals()[d['type']]
+			self.outputs[name] = GPlugOut(mod, name, plug_type)
+
+		# Conecta SOLO las conexiones de entrada, de forma
+		# que las de salida se autoconectan
+
+		conf_inputs = config['inputs']
+		for name in conf_inputs.keys():
+			plugs = conf_inputs[name]['plugs']
+			for plug_name in plugs:
+				self.inputs[name].connect(self.outputs[plug_name])
 
 
 
