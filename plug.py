@@ -47,6 +47,10 @@ class Plug:
 
 
 class PlugIn(Plug):
+	def __init__(self, mod, name):
+		Plug.__init__(self, mod, name)
+		self.updating = False
+
 	def connect(self, plug_out):
 		self._check_plug_out(plug_out)
 
@@ -71,7 +75,12 @@ class PlugIn(Plug):
 
 	def update(self):
 #		print('PlugIn {} updating mod {}'.format(self.name, self.mod.name))
+		if self.connected():
+			self.data = self.plugs[0].data
+		if self.updating: return
+		self.updating = True
 		self.mod.update()
+		self.updating = False
 
 	def show(self):
 		if self.connected():
@@ -109,9 +118,8 @@ class PlugOut(Plug):
 		if not self.connected(plug_in): raise RuntimeError()
 		self.plugs.remove(plug_in)
 
-	def update(self, data):
+	def update(self):
 #		print('PlugOut {} updating mod {}'.format(self.name, self.mod.name))
-		self.data = data
 		for plug in self.plugs:
 			plug.update()
 
@@ -196,17 +204,26 @@ class PlugManager(object):
 			plug.connect(plug_in)
 
 		else: raise RuntimeError()
+
+	def filter_self(self, mod, plugs):
+		return [plug.name for plug in self.plugs if plug.mod != mod]
 	
-	def get_outputs(self, class_filter):
+	def get_outputs(self, mod, filter_list):
 		'Obtiene una lista de las salidas del tipo filtrado'
 		# Si no hay filtro, devolver todas
-		if class_filter == []: return self.outputs.keys()
+		if filter_list == []:
+			return self.filter_self(self.outputs.values())
 		# Si no, fltrar por el tipo
 		input_list = []
 		for name in self.outputs:
 			plug_type = self.outputs[name].plug_type
-			if plug_type in class_filter:
-				input_list.append(name)
+			if plug_type == None: continue
+			if self.outputs[name].mod == mod: continue
+			for class_filter in filter_list:
+				if issubclass(plug_type, class_filter):
+					input_list.append(name)
+					break
+
 		return input_list
 
 	def get_input(self, name):
