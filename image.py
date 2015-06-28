@@ -20,6 +20,10 @@ class Image(object):
 	def get_model(self):
 		if len(self.alias) > 0: return self.alias[0]
 		else: return None
+
+	def copy(self):
+		img = self.img.copy()
+		return self.__class__(img)
 			
 
 

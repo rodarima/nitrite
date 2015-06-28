@@ -216,11 +216,16 @@ class PlugManager(object):
 		# Si no, fltrar por el tipo
 		input_list = []
 		for name in self.outputs:
-			plug_type = self.outputs[name].plug_type
+			plug = self.outputs[name]
+			plug_type = plug.plug_type
 			if plug_type == None: continue
-			if self.outputs[name].mod == mod: continue
+			if plug.mod == mod: continue
 			for class_filter in filter_list:
 				if issubclass(plug_type, class_filter):
+					input_list.append(name)
+					break
+				# Si data.img es del tipo filtrado, añadirla también
+				if plug.data != None and isinstance(plug.data, class_filter):
 					input_list.append(name)
 					break
 

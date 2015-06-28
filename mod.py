@@ -19,6 +19,10 @@ from PyQt4 import QtGui, QtCore, uic
 from image import *
 from plug import *
 
+import cv2
+import skimage.morphology
+import skimage.transform
+import skimage.draw
 import sys
 import json
 import pprint
@@ -752,6 +756,7 @@ class ModViewer(ModIO):
 	def load_image(self, img):
 		rgb = img.convert('rgb')
 		img_rgb = rgb.img
+		if type(img_rgb) != np.ndarray: return
 		height, width, byteValue = img_rgb.shape
 		byteValue = byteValue * width
 
@@ -911,6 +916,7 @@ class ModBitwise(ModBase):
 		if operation_tuple[2] == 2:
 			if data2 == None: return
 			img2 = data2.img
+			if img1.shape != img2.shape: return
 			dst = operation_function(src1 = img1, src2 = img2)
 		elif operation_tuple[2] == 1:
 			dst = operation_function(src = img1)
@@ -957,9 +963,9 @@ class ModHoughCircle(ModBase):
 			circles = np.uint16(np.around(circles))
 			for i in circles[0,:]:
 				# draw the outer circle
-				cv2.circle(img,(i[0],i[1]),i[2],(0,255,0),2)
+				cv2.circle(img,(i[0],i[1]),i[2],(255,255,0),2)
 				# draw the center of the circle
-				cv2.circle(img,(i[0],i[1]),2,(0,0,255),3)
+				cv2.circle(img,(i[0],i[1]),1,(255,255,0),2)
 
 		self.set_output("Array", circles)
 		self.set_output("Img", rgb)
@@ -996,6 +1002,128 @@ class ModCanny(ModBase):
 		)
 
 		self.set_output("Edges", zero)
+
+class ModBlur(ModBase):
+	mod_name = 'Blur'
+
+	def init_IO(self):
+		self.add_input('Img', [Image])
+		self.add_output('Img', Image)
+
+	def init_GUI(self):
+		self.add_int("Size", min = 1)
+	
+	def update(self):
+		data = self.get_input("Img")
+		if data == None: return
+
+		data = data.copy()
+		size = self.get_int("Size")
+
+		data.img = cv2.blur(
+			src = data.img,
+			ksize = (size, size)
+		)
+
+		self.set_output("Img", data)
+
+class ModSkeleton(ModBase):
+	mod_name = 'Skeleton'
+
+	def init_IO(self):
+		self.add_input('Img', [ImageGray])
+		self.add_output('Img', ImageGray)
+
+	def init_GUI(self): pass
+	
+	def update(self):
+		data = self.get_input("Img")
+		if data == None: return
+
+		data = data.copy()
+		data.img[data.img > 0] = 1
+
+		data.img = skimage.morphology.skeletonize(
+			image = data.img
+		)
+		data.img = data.img.astype(np.uint8)
+		data.img[data.img > 0] = 255
+
+		self.set_output("Img", data)
+
+class ModHoughEllipse(ModBase):
+	mod_name = 'HoughEllipse'
+
+	def init_IO(self):
+		self.add_input('Img', [ImageGray])
+		self.add_output('Draw', ImageRGB)
+
+	def init_GUI(self):
+		self.add_int('Threshold', min=0, max=10000, value=250)
+		self.add_double('Accuracy', min=0, step=0.5, max=1000, value=20)
+		self.add_int('Size min', value=100)
+		self.add_int('Size max', value=120)
+	
+	def update(self):
+		data = self.get_input("Img")
+		if data == None: return
+
+
+		result = skimage.transform.hough_ellipse(
+			data.img,
+			threshold = self.get_int('Threshold'),
+			accuracy = self.get_double('Accuracy'),
+			min_size = self.get_int('Size min'),
+			max_size = self.get_int('Size max')
+		)
+
+		data = data.copy().convert('rgb')
+
+		# Draw each ellipse
+		for ellipse in result:
+			acc, yc, xc, a, b, orientation = ellipse
+			cy, cx = skimage.draw.ellipse_perimeter(yc, xc, a, b, orientation)
+			data.img[cy, cx] = (255,255,0)
+
+
+		self.set_output('Draw', data)
+
+class ModFindContours(ModBase):
+	mod_name = 'FindContours'
+
+	def init_IO(self):
+		self.add_input('Img', [ImageGray])
+		self.add_output('Draw', ImageRGB)
+
+	def init_GUI(self):
+		self.methods = [
+			('None',	cv2.cv.CV_CHAIN_APPROX_NONE),
+			('Simple',	cv2.cv.CV_CHAIN_APPROX_SIMPLE),
+			('L1',		cv2.cv.CV_CHAIN_APPROX_TC89_L1),
+			('KCOS',	cv2.cv.CV_CHAIN_APPROX_TC89_KCOS)
+		]
+		self.method_names = [method[0] for method in self.methods]
+		self.add_combo('Method', self.method_names)
+	
+	def update(self):
+		data = self.get_input("Img")
+		if data == None: return
+
+		method_name = self.get_combo('Method')
+		method_index = self.method_names.index(method_name)
+		method = self.methods[method_index][1]
+
+		data = data.copy()
+		contours, hierarchy = cv2.findContours(
+			image = data.img,
+			mode = cv2.cv.CV_RETR_LIST,
+			method = method
+		)
+
+		data = data.convert('rgb')
+		cv2.drawContours(data.img, contours, -1, (255,0,0), 1)
+
+		self.set_output('Draw', data)
 
 class ModList:
 
@@ -1303,7 +1431,8 @@ class Main(QtGui.QMainWindow):
 
 #MODS = [ModScale, ModCLAHE, ModRange, ModMorph, ModBitwise, ModHist2D]
 MODS = [ModTestInput, ModImage, ModViewer, ModScale, ModRange, ModMorph,
-		ModBitwise, ModHoughCircle, ModCanny]
+		ModBitwise, ModHoughCircle, ModCanny, ModBlur, ModSkeleton, ModHoughEllipse,
+		ModFindContours]
 app = QtGui.QApplication(sys.argv)
 #app.setStyle("plastique")
 myWidget = Main()
