@@ -129,7 +129,7 @@ class PlugOut(Plug):
 
 	def destroy(self):
 		if self.connected():
-			for plug in plugs:
+			for plug in self.plugs:
 				self.disconnect(plug)
 
 class GPlugIn(PlugIn):
@@ -206,13 +206,14 @@ class PlugManager(object):
 		else: raise RuntimeError()
 
 	def filter_self(self, mod, plugs):
-		return [plug.name for plug in self.plugs if plug.mod != mod]
+		return [plug.name for plug in plugs if plug.mod != mod]
 	
 	def get_outputs(self, mod, filter_list):
 		'Obtiene una lista de las salidas del tipo filtrado'
 		# Si no hay filtro, devolver todas
 		if filter_list == []:
-			return self.filter_self(self.outputs.values())
+			l = self.filter_self(mod, self.outputs.values())
+			return l
 		# Si no, fltrar por el tipo
 		input_list = []
 		for name in self.outputs:

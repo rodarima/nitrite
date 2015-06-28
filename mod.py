@@ -303,7 +303,7 @@ class ModDouble:
 		self.gui_double[label] = QtGui.QDoubleSpinBox()
 		double = self.gui_double[label]
 		double.setMinimum(min)
-		double.setMaximum(max)
+		if max: double.setMaximum(max)
 		double.setSingleStep(step)
 		double.setValue(value)
 
@@ -934,6 +934,7 @@ class ModFindContours(ModBase):
 	def init_IO(self):
 		self.add_input('Img', [ImageGray])
 		self.add_output('Draw', ImageRGB)
+		self.add_output('Array')
 
 	def init_GUI(self):
 		self.methods = [
@@ -964,6 +965,100 @@ class ModFindContours(ModBase):
 		cv2.drawContours(data.img, contours, -1, (255,0,0), 1)
 
 		self.set_output('Draw', data)
+		self.set_output('Array', contours)
+
+class ModApproxPoly(ModBase):
+	mod_name = 'ApproxPoly'
+
+
+	def init_IO(self):
+		self.add_input('Array', [])
+		self.add_input('Draw', [Image])
+		self.add_output('Array')
+		self.add_output('Draw', ImageRGB)
+
+	def init_GUI(self):
+		self.add_double('Epsilon')
+		self.add_int('Closed', min=0, max=1, value=1)
+	
+	def update(self):
+		data = self.get_input("Array")
+		draw = self.get_input("Draw")
+		if data == None or draw == None:
+			return
+
+		#print(data)
+		#print(type(data))
+
+		closed = True
+		if self.get_int('Closed') > 0: closed = True
+		approx_contours = []
+		for contour in data:
+			approx_curve = cv2.approxPolyDP(
+				curve = contour,
+				epsilon = self.get_double('Epsilon'),
+				closed = closed
+			)
+
+			#print(approx_curve)
+			#print(type(approx_curve))
+			approx_contours.append(approx_curve)
+
+		draw = draw.copy().convert('rgb')
+		cv2.drawContours(draw.img, approx_contours, -1, (0,255,0), 2)
+
+		self.set_output('Draw', draw)
+		self.set_output('Array', approx_contours)
+
+class ModGeometry(ModBase):
+	mod_name = 'Geometry'
+
+
+	def init_IO(self):
+		self.add_input('Array', [])
+		self.add_input('Draw', [Image])
+		self.add_output('Array')
+		self.add_output('Draw', ImageRGB)
+
+	def init_GUI(self):
+		self.add_int('Vertex min', min=1, value=3)
+		self.add_int('Vertex max', min=1, value=3)
+		self.add_double('Area min', min=0, value=10)
+		self.add_double('Area max', min=0, value=100)
+		self.add_int('Perimeter min', min=1, max=100000)
+		self.add_int('Perimeter max', min=1, max=100000)
+	
+	def update(self):
+		data = self.get_input("Array")
+		draw = self.get_input("Draw")
+		if data == None or draw == None:
+			return
+
+
+		vmin = self.get_int('Vertex min')
+		vmax = self.get_int('Vertex max')
+		pmin = self.get_int('Perimeter min')
+		pmax = self.get_int('Perimeter max')
+		amin = self.get_int('Area min')
+		amax = self.get_int('Area max')
+
+		new_list = []
+		for poly in data:
+			if len(poly) > vmax or len(poly) < vmin: continue
+			perimeter = cv2.arcLength(poly, True)
+			if perimeter > pmax or perimeter < pmin: continue
+			area = cv2.contourArea(poly)
+			if area > amax or area < amin: continue
+			#cv2.minEnclosingCircle(points) -> center, radius
+
+			new_list.append(poly)
+
+		draw = draw.copy().convert('rgb')
+		cv2.drawContours(draw.img, new_list, -1, (0,255,0), 2)
+
+		self.set_output('Draw', draw)
+		self.set_output('Array', new_list)
+
 
 class ModList:
 	'Se encarga de añadir o quitar módulos, así como de mostrarlos'
@@ -1205,7 +1300,7 @@ class Main(QtGui.QMainWindow):
 #MODS = [ModScale, ModCLAHE, ModRange, ModMorph, ModBitwise, ModHist2D]
 MODS = [ModImage, ModViewer, ModScale, ModRange, ModMorph,
 		ModBitwise, ModHoughCircle, ModCanny, ModBlur, ModSkeleton, ModHoughEllipse,
-		ModFindContours]
+		ModFindContours, ModApproxPoly, ModGeometry]
 app = QtGui.QApplication(sys.argv)
 #app.setStyle("plastique")
 myWidget = Main()
