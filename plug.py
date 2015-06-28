@@ -257,6 +257,8 @@ class PlugManager(object):
 		el nombre de una salida'''
 
 		self.outputs.pop(output.name)
+		if new_name == '':
+			new_name = output.mod.name + '.out'
 
 		if new_name in self.outputs.keys():
 			old_name = new_name

@@ -126,6 +126,9 @@
                    <height>16777215</height>
                   </size>
                  </property>
+                 <property name="dragDropMode">
+                  <enum>QAbstractItemView::InternalMove</enum>
+                 </property>
                 </widget>
                </item>
               </layout>
@@ -151,7 +154,7 @@
                 <widget class="QComboBox" name="combo_mod">
                  <property name="sizePolicy">
                   <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                   <horstretch>0</horstretch>
+                   <horstretch>1</horstretch>
                    <verstretch>0</verstretch>
                   </sizepolicy>
                  </property>
@@ -171,8 +174,39 @@
                    <verstretch>0</verstretch>
                   </sizepolicy>
                  </property>
+                 <property name="minimumSize">
+                  <size>
+                   <width>20</width>
+                   <height>0</height>
+                  </size>
+                 </property>
+                 <property name="maximumSize">
+                  <size>
+                   <width>50</width>
+                   <height>16777215</height>
+                  </size>
+                 </property>
                  <property name="text">
                   <string>Add</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="button_del_mod">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="maximumSize">
+                  <size>
+                   <width>50</width>
+                   <height>16777215</height>
+                  </size>
+                 </property>
+                 <property name="text">
+                  <string>Del</string>
                  </property>
                 </widget>
                </item>
@@ -196,7 +230,7 @@
                <x>0</x>
                <y>0</y>
                <width>276</width>
-               <height>304</height>
+               <height>307</height>
               </rect>
              </property>
              <property name="sizePolicy">
