@@ -478,6 +478,8 @@ class ModBase(ModIO, ModDouble, ModInt, ModCombo):
 			ModCombo.restore(self, d['ModCombo'])
 		except:
 			print('Error at restore on mod {}'.format(self.name))
+			print('Config:')
+			print(d)
 
 class ModTestInput(ModIO):
 	mod_name = 'Test'
@@ -1064,6 +1066,80 @@ class ModGeometry(ModBase):
 		self.set_output('Draw', draw)
 		self.set_output('Array', new_list)
 
+class ModAdaptativeRange(ModBase):
+	mod_name = 'AdaptativeRange'
+
+	def init_IO(self):
+		self.add_input("In", [ImageColor])
+		self.add_output("Out", ImageGray)
+
+	def init_GUI(self):
+		self.ch_min = ['Ch0 min', 'Ch1 min', 'Ch2 min']
+		self.ch_max = ['Ch0 max', 'Ch1 max', 'Ch2 max']
+		self.models = [c.alias[0] for c in ImageColor.models]
+		self.add_combo('Model', self.models)
+		for label in self.ch_min:
+			self.add_double(label, min=-512, max=512, value=20, step=1)
+		for label in self.ch_max:
+			self.add_double(label, min=-512, max=512, value=50, step=1)
+
+		self.methods = [
+			('Mean', cv2.ADAPTIVE_THRESH_MEAN_C),
+			('Gaussian', cv2.ADAPTIVE_THRESH_GAUSSIAN_C)
+		]
+		self.method_names = [method[0] for method in self.methods]
+		self.add_combo('Method', self.method_names)
+		self.add_int('Size', min=1, value=1)
+
+	def update(self):
+		data = self.get_input("In")
+		if data == None: return
+
+		model = self.get_combo('Model')
+		data = data.convert(model)
+
+		min_val = [self.get_double(label) for label in self.ch_min]
+		max_val = [self.get_double(label) for label in self.ch_max]
+
+		channels = len(min_val)
+		method_name = self.get_combo('Method')
+		method_i = self.method_names.index(method_name)
+		method = self.methods[method_i][1]
+		size = self.get_int('Size') * 2 + 1
+
+		# Filtrar el mínimo
+		gray = data.convert('gray')
+		thrs = np.ones(gray.img.shape, dtype=np.uint8)
+		thrs.fill(255)
+		for i in range(len(data.channels)):
+			min0 = min_val[i]
+			max0 = max_val[i]
+			thr1 = cv2.adaptiveThreshold(
+				src = data[i],
+				maxValue = 255,
+				adaptiveMethod = method,
+				thresholdType = cv2.THRESH_BINARY,
+				blockSize = size,
+				C = -min0
+			)
+			thr2 = cv2.adaptiveThreshold(
+				src = data[i],
+				maxValue = 255,
+				adaptiveMethod = method,
+				thresholdType = cv2.THRESH_BINARY_INV,
+				blockSize = size,
+				C = -max0
+			)
+
+			if min0 < max0:
+				thr = cv2.bitwise_and(thr1, thr2)
+			else:
+				thr = cv2.bitwise_or(thr1, thr2)
+
+			thrs = cv2.bitwise_and(thrs, thr)
+
+		self.set_output('Out', ImageGray(thrs))
+
 
 class ModList:
 	'Se encarga de añadir o quitar módulos, así como de mostrarlos'
@@ -1305,7 +1381,7 @@ class Main(QtGui.QMainWindow):
 #MODS = [ModScale, ModCLAHE, ModRange, ModMorph, ModBitwise, ModHist2D]
 MODS = [ModImage, ModViewer, ModScale, ModRange, ModMorph,
 		ModBitwise, ModHoughCircle, ModCanny, ModBlur, ModSkeleton, ModHoughEllipse,
-		ModFindContours, ModApproxPoly, ModGeometry]
+		ModFindContours, ModApproxPoly, ModGeometry, ModAdaptativeRange]
 app = QtGui.QApplication(sys.argv)
 #app.setStyle("plastique")
 myWidget = Main()
