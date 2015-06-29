@@ -472,9 +472,12 @@ class ModBase(ModIO, ModDouble, ModInt, ModCombo):
 		ModIO.restore(self, d['ModIO'])
 
 		self.init_GUI()
-		ModDouble.restore(self, d['ModDouble'])
-		ModInt.restore(self, d['ModInt'])
-		ModCombo.restore(self, d['ModCombo'])
+		try:
+			ModDouble.restore(self, d['ModDouble'])
+			ModInt.restore(self, d['ModInt'])
+			ModCombo.restore(self, d['ModCombo'])
+		except:
+			print('Error at restore on mod {}'.format(self.name))
 
 class ModTestInput(ModIO):
 	mod_name = 'Test'
@@ -702,6 +705,7 @@ class ModMorph(ModBase):
 		self.add_combo('Operation', self.operations_name)
 		self.add_combo('Shape', self.kernel_shapes_name)
 		self.add_int('Size', min=1, max=200, step=1, value=5)
+		self.add_int('Iterations', min=1, max=200, step=1, value=1)
 
 	def update(self):
 		data = self.get_input('In')
@@ -712,10 +716,11 @@ class ModMorph(ModBase):
 		operation = self.operations[self.operations_name.index(operation_name)][1]
 		shape_name = self.get_combo('Shape')
 		shape = self.kernel_shapes[self.kernel_shapes_name.index(shape_name)][1]
+		iterations = self.get_int('Iterations')
 
 		img = data.img
 		kernel = cv2.getStructuringElement(shape, (size, size))
-		gray = cv2.morphologyEx(img, operation, kernel)
+		gray = cv2.morphologyEx(img, operation, kernel, iterations = iterations)
 
 		data = ImageGray(gray)
 
@@ -1023,8 +1028,8 @@ class ModGeometry(ModBase):
 	def init_GUI(self):
 		self.add_int('Vertex min', min=1, value=3)
 		self.add_int('Vertex max', min=1, value=3)
-		self.add_double('Area min', min=0, value=10)
-		self.add_double('Area max', min=0, value=100)
+		self.add_double('Area min', min=0, value=10, max=100000)
+		self.add_double('Area max', min=0, value=100, max=100000)
 		self.add_int('Perimeter min', min=1, max=100000)
 		self.add_int('Perimeter max', min=1, max=100000)
 	
@@ -1039,8 +1044,8 @@ class ModGeometry(ModBase):
 		vmax = self.get_int('Vertex max')
 		pmin = self.get_int('Perimeter min')
 		pmax = self.get_int('Perimeter max')
-		amin = self.get_int('Area min')
-		amax = self.get_int('Area max')
+		amin = self.get_double('Area min')
+		amax = self.get_double('Area max')
 
 		new_list = []
 		for poly in data:
