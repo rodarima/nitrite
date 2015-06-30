@@ -53,7 +53,7 @@ Que se puede cargar desde el menú:
 Bibliotecas
 -----------
 Para el procesado de imágenes se emplea OpenCV en python2, así como algunas 
-operaciones de scikit-image.
+operaciones de scikit-image. Para la interfaz gráfica QT para python2.
 
 Ejecución
 ---------
