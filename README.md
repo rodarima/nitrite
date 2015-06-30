@@ -42,6 +42,14 @@ se puede almacenar en archivos de configuración json, para posteriormente
 recuperar la estructura creada. Además la configuración de cada módulo también 
 es almacenada.
 
+La configuración para detectar señales se puede encontrar en:
+
+	config/sign/detect.json
+
+Que se puede cargar desde el menú:
+
+	File > Open config
+
 Bibliotecas
 -----------
 Para el procesado de imágenes se emplea OpenCV en python2, así como algunas 
@@ -51,3 +59,4 @@ Ejecución
 ---------
 
 	$ python2 nitrite.py
+
