@@ -1034,6 +1034,9 @@ class ModGeometry(ModBase):
 		self.add_double('Area max', min=0, value=100, max=100000)
 		self.add_int('Perimeter min', min=1, max=100000)
 		self.add_int('Perimeter max', min=1, max=100000)
+		self.add_int('R', min=0, max=255, value=0)
+		self.add_int('G', min=0, max=255, value=255)
+		self.add_int('B', min=0, max=255, value=0)
 	
 	def update(self):
 		data = self.get_input("Array")
@@ -1049,6 +1052,10 @@ class ModGeometry(ModBase):
 		amin = self.get_double('Area min')
 		amax = self.get_double('Area max')
 
+		r = self.get_int('R')
+		g = self.get_int('G')
+		b = self.get_int('B')
+
 		new_list = []
 		for poly in data:
 			if len(poly) > vmax or len(poly) < vmin: continue
@@ -1061,7 +1068,7 @@ class ModGeometry(ModBase):
 			new_list.append(poly)
 
 		draw = draw.copy().convert('rgb')
-		cv2.drawContours(draw.img, new_list, -1, (0,255,0), 2)
+		cv2.drawContours(draw.img, new_list, -1, (r,g,b), 2)
 
 		self.set_output('Draw', draw)
 		self.set_output('Array', new_list)
